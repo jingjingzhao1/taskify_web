@@ -25,6 +25,7 @@ struct UpdateTodoReq {
     progress: u8,
 }
 
+//The function create_todo is the handler for the POST request to /todo.
 async fn create_todo(data: web::Data<AppState>, todo: web::Form<CreateTodoReq>) -> impl Responder {
     match data
         .database
@@ -40,12 +41,15 @@ async fn create_todo(data: web::Data<AppState>, todo: web::Form<CreateTodoReq>) 
     }
 }
 
+//The function create_to2 is the handler for the GET request to /todo.
 async fn create_to2(tmpl: web::Data<tera::Tera>) -> impl Responder {
     let ctx = Context::new();
     let s = tmpl.render("add.html", &ctx).unwrap();
     HttpResponse::Ok().body(s)
 }
 
+//The function list_all_todos is the handler for the GET request to /todos 
+//and list all data by JSON.
 async fn list_all_todos(data: web::Data<AppState>) -> impl Responder {
     match data.database.get_all() {
         Ok(todos) => {
@@ -61,6 +65,7 @@ async fn list_all_todos(data: web::Data<AppState>) -> impl Responder {
     }
 }
 
+//The function get_by_id is the handler for the GET request to /todos/{id}.
 async fn get_by_id(
     data: web::Data<AppState>,
     id: web::Path<u32>,
@@ -86,6 +91,7 @@ async fn get_by_id(
     }
 }
 
+//The function update_todo is the handler for the POST/PUT request to /todos/{id}.
 async fn update_todo(
     data: web::Data<AppState>,
     id: web::Path<u32>,
@@ -108,6 +114,7 @@ async fn update_todo(
     }
 }
 
+//The function delete_todo is the handler for the POST/DELETE request to /todos/{id}.
 async fn delete_todo(data: web::Data<AppState>, id: web::Path<u32>) -> impl Responder {
     match data.database.delete_by_id(id.into_inner()) {
         Ok(_) => HttpResponse::SeeOther()
@@ -120,6 +127,7 @@ async fn delete_todo(data: web::Data<AppState>, id: web::Path<u32>) -> impl Resp
     }
 }
 
+//The function index is the handler for the GET request to /.
 async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>) -> impl Responder {
     match data.database.get_all() {
         Ok(todos) => {

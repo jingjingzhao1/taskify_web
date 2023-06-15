@@ -9,6 +9,7 @@ pub struct Task {
     pub progress: u8,
 }
 
+//The function new is a constructor for Task.
 impl Task {
     pub fn new(title: &str, description: &str) -> Self {
         Self {
@@ -24,7 +25,10 @@ pub struct Database {
     conn: Connection,
 }
 
+//The function new is a constructor for Database.
 impl Database {
+
+    //The function check the file for database.
     pub fn new(filename: String) -> Self {
         let set = Self {
             conn: match Connection::open(filename) {
@@ -37,6 +41,7 @@ impl Database {
         set
     }
 
+    //The function init is a constructor for Database.
     pub fn init(&self) -> Result<(), Error> {
         let stmt = "
         CREATE TABLE IF NOT EXISTS todo (
@@ -51,6 +56,8 @@ impl Database {
             Err(err) => Err(err),
         }
     }
+
+    //The function insert new data to Database.
     pub fn insert(&self, item: Task) -> Result<Task, Error> {
         let mut stmt = match self
             .conn
@@ -74,6 +81,7 @@ impl Database {
         }
     }
 
+    //The function refund all the data from Database.
     pub fn get_all(&self) -> Result<Vec<Task>, Error> {
         let mut stmt = match self
             .conn
@@ -102,6 +110,7 @@ impl Database {
         }
     }
 
+    //The function find data by id from Database.
     pub fn get_by_id(&self, id: u32) -> Result<Task, Error> {
         let mut stmt = match self
             .conn
@@ -127,6 +136,7 @@ impl Database {
         }
     }
 
+    //The function update data by id from Database.
     pub fn update_todo(&self, item: &Task) -> Result<(), Error> {
         let mut stmt = match self
             .conn
@@ -150,6 +160,7 @@ impl Database {
         }
     }
 
+    //The function delete data by id from Database.
     pub fn delete_by_id(&self, id: u32) -> Result<(), Error> {
         let mut stmt = match self.conn.prepare("DELETE FROM todo WHERE id = ?1;") {
             Ok(stmt) => stmt,
