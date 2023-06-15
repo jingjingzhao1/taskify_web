@@ -1,10 +1,12 @@
-use std::io;
-use env_logger;
-use actix_web::{middleware, web, App,HttpResponse, HttpServer, Responder};
-use serde::{Deserialize};
-mod db;
-use crate::{db::{ Database, Todo}};
+extern crate tera;
 
+use actix_web::{middleware, web, App, HttpResponse, HttpServer, Responder};
+use env_logger;
+use serde::Deserialize;
+use std::io;
+mod db;
+use crate::db::{Database, Task};
+use tera::{Context, Tera};
 
 struct AppState {
     database: Database,
@@ -23,18 +25,25 @@ struct UpdateTodoReq {
     progress: u8,
 }
 
-async fn create_todo(
-    
-    data: web::Data<AppState>,
-    todo: web::Json<CreateTodoReq>,
-) -> impl Responder {
-    match data.database.insert(Todo::new(&todo.title,&todo.description)) {
-        Ok(todo) => HttpResponse::Created().json(todo),
+async fn create_todo(data: web::Data<AppState>, todo: web::Form<CreateTodoReq>) -> impl Responder {
+    match data
+        .database
+        .insert(Task::new(&todo.title, &todo.description))
+    {
+        Ok(_) => HttpResponse::SeeOther()
+            .append_header((actix_web::http::header::LOCATION, "/"))
+            .finish(),
         Err(err) => {
-            log::error!("couldn't insert todo: {}", err);
+            log::error!("Couldn't insert todo: {}", err);
             HttpResponse::InternalServerError().finish()
         }
     }
+}
+
+async fn create_to2(tmpl: web::Data<tera::Tera>) -> impl Responder {
+    let ctx = Context::new();
+    let s = tmpl.render("add.html", &ctx).unwrap();
+    HttpResponse::Ok().body(s)
 }
 
 async fn list_all_todos(data: web::Data<AppState>) -> impl Responder {
@@ -46,18 +55,29 @@ async fn list_all_todos(data: web::Data<AppState>) -> impl Responder {
                 HttpResponse::Ok().json(todos)
             }
         }
-        Err(err) => HttpResponse::InternalServerError().body(format!("Failed to retrieve tasks: {}", err)),
+        Err(err) => {
+            HttpResponse::InternalServerError().body(format!("Failed to retrieve tasks: {}", err))
+        }
     }
 }
 
 async fn get_by_id(
     data: web::Data<AppState>,
     id: web::Path<u32>,
+    tmpl: web::Data<tera::Tera>,
 ) -> impl Responder {
     match data.database.get_by_id(id.into_inner()) {
         Ok(todo) => {
-            log::info!("Successfully retrieved todo by ID");
-            HttpResponse::Ok().json(todo)   
+            let mut ctx = Context::new();
+            ctx.insert("todo", &todo);
+
+            match tmpl.render("update.html", &ctx) {
+                Ok(s) => HttpResponse::Ok().body(s),
+                Err(err) => {
+                    log::error!("Failed to render 'update.html': {}", err);
+                    HttpResponse::InternalServerError().finish()
+                }
+            }
         }
         Err(err) => {
             log::error!("couldn't get todo by id: {}", err);
@@ -69,19 +89,18 @@ async fn get_by_id(
 async fn update_todo(
     data: web::Data<AppState>,
     id: web::Path<u32>,
-    todo: web::Json<UpdateTodoReq>,
+    todo: web::Form<UpdateTodoReq>,
 ) -> impl Responder {
-    let todo = Todo {
+    let todo = Task {
         id: Some(id.into_inner()),
         title: todo.title.clone(),
         description: todo.description.clone(),
         progress: todo.progress,
     };
     match data.database.update_todo(&todo) {
-        Ok(todo) => {
-            log::info!("Successfully update todo by ID");
-            HttpResponse::Ok().json(todo)   
-        }
+        Ok(_) => HttpResponse::SeeOther()
+            .append_header((actix_web::http::header::LOCATION, "/"))
+            .finish(),
         Err(err) => {
             log::error!("couldn't update todo: {}", err);
             HttpResponse::InternalServerError().finish()
@@ -89,18 +108,33 @@ async fn update_todo(
     }
 }
 
-async fn delete_todo(
-    data: web::Data<AppState>,
-    id: web::Path<u32>,
-) -> impl Responder {
+async fn delete_todo(data: web::Data<AppState>, id: web::Path<u32>) -> impl Responder {
     match data.database.delete_by_id(id.into_inner()) {
-        Ok(_) => {
-            log::info!("Successfully Delete todo");
-            HttpResponse::Ok().finish()   
-        }
+        Ok(_) => HttpResponse::SeeOther()
+            .append_header((actix_web::http::header::LOCATION, "/"))
+            .finish(),
         Err(err) => {
             log::error!("couldn't delete todo: {}", err);
             HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>) -> impl Responder {
+    match data.database.get_all() {
+        Ok(todos) => {
+            let mut context = Context::new();
+            context.insert("todos", &todos);
+            match tmpl.render("index.html", &context) {
+                Ok(rendered) => HttpResponse::Ok().body(rendered),
+                Err(err) => {
+                    log::error!("Failed to render 'index.html': {}", err);
+                    HttpResponse::InternalServerError().finish()
+                }
+            }
+        }
+        Err(err) => {
+            HttpResponse::InternalServerError().body(format!("Failed to retrieve tasks: {}", err))
         }
     }
 }
@@ -113,17 +147,33 @@ async fn main() -> io::Result<()> {
     log::info!("starting HTTP server at http://localhost:8080");
 
     HttpServer::new(move || {
+        let tera = match Tera::new("templates/**/*.html") {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Parsing error(s): {}", e);
+                ::std::process::exit(1);
+            }
+        };
+
         App::new()
+            .app_data(web::Data::new(tera))
             .app_data(web::Data::new(AppState {
                 database: Database::new(String::from("data.db")),
             }))
             .wrap(middleware::Logger::default())
-            .service(web::resource("/").route(web::get().to(|| HttpResponse::Ok())))
-            .service(web::resource("/todo").route(web::post().to(create_todo)))
+            .service(web::resource("/").route(web::get().to(index)))
+            .service(
+                web::resource("/todo")
+                    .route(web::post().to(create_todo))
+                    .route(web::get().to(create_to2)),
+            )
             .service(web::resource("/todos").route(web::get().to(list_all_todos)))
-            .service(web::resource("/todos/{id}").route(web::get().to(get_by_id)))
-            .service(web::resource("/todos/update/{id}").route(web::patch().to(update_todo)))
-            .service(web::resource("/todos/delete/{id}").route(web::delete().to(delete_todo)))
+            .service(
+                web::resource("/todos/{id}")
+                    .route(web::get().to(get_by_id))
+                    .route(web::post().to(update_todo)),
+            )
+            .service(web::resource("/todos/delete/{id}").route(web::post().to(delete_todo)))
     })
     .bind(("127.0.0.1", 8080))?
     .run()

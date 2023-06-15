@@ -12,3 +12,5 @@ rusqlite = "0.28"
 serde = {version = "1", features = ["derive"] }
 log = "0.4"
 anyhow = "1.0.44"
+derive_more = "0.99.0"
+tera = "1"

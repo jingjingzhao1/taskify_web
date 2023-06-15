@@ -1,16 +1,15 @@
-use rusqlite::{Connection, Result,Error};
+use rusqlite::{Connection, Error, Result};
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Todo {
+pub struct Task {
     pub id: Option<u32>,
     pub title: String,
     pub description: String,
     pub progress: u8,
 }
 
-impl Todo {
+impl Task {
     pub fn new(title: &str, description: &str) -> Self {
         Self {
             id: None,
@@ -20,7 +19,6 @@ impl Todo {
         }
     }
 }
-
 
 pub struct Database {
     conn: Connection,
@@ -53,7 +51,7 @@ impl Database {
             Err(err) => Err(err),
         }
     }
-    pub fn insert(&self, item: Todo) -> Result<Todo, Error> {
+    pub fn insert(&self, item: Task) -> Result<Task, Error> {
         let mut stmt = match self
             .conn
             .prepare("INSERT INTO todo (title, description, progress) VALUES (?1, ?2, ?3);")
@@ -61,11 +59,11 @@ impl Database {
             Ok(stmt) => stmt,
             Err(err) => return Err(err),
         };
-        let res = stmt.execute([&item.title, &item.description,&item.progress.to_string()]);
+        let res = stmt.execute([&item.title, &item.description, &item.progress.to_string()]);
         match res {
             Ok(_) => {
                 let last_id = self.conn.last_insert_rowid() as u32;
-                Ok(Todo {
+                Ok(Task {
                     id: Some(last_id),
                     title: item.title,
                     description: item.description,
@@ -76,13 +74,16 @@ impl Database {
         }
     }
 
-    pub fn get_all(&self) -> Result<Vec<Todo>, Error> {
-        let mut stmt = match self.conn.prepare("SELECT id, title, description, progress FROM todo;") {
+    pub fn get_all(&self) -> Result<Vec<Task>, Error> {
+        let mut stmt = match self
+            .conn
+            .prepare("SELECT id, title, description, progress FROM todo;")
+        {
             Ok(stmt) => stmt,
             Err(err) => return Err(err),
         };
         let res = stmt.query_map([], |row| {
-            Ok(Todo {
+            Ok(Task {
                 id: row.get(0).unwrap(),
                 title: row.get(1).unwrap(),
                 description: row.get(2).unwrap(),
@@ -101,7 +102,7 @@ impl Database {
         }
     }
 
-    pub fn get_by_id(&self, id: u32) -> Result<Todo, Error> {
+    pub fn get_by_id(&self, id: u32) -> Result<Task, Error> {
         let mut stmt = match self
             .conn
             .prepare("SELECT id, title, description, progress FROM todo WHERE id = ?1;")
@@ -110,7 +111,7 @@ impl Database {
             Err(err) => return Err(err),
         };
         let res = stmt.query_map([id], |row| {
-            Ok(Todo {
+            Ok(Task {
                 id: row.get(0).unwrap(),
                 title: row.get(1).unwrap(),
                 description: row.get(2).unwrap(),
@@ -126,15 +127,26 @@ impl Database {
         }
     }
 
-    pub fn update_todo(&self, item: &Todo) -> Result<(), Error> {
-        let mut stmt = match self.conn.prepare("UPDATE todo SET title = ?1, description = ?2, progress = ?3 WHERE id = ?4;") {
+    pub fn update_todo(&self, item: &Task) -> Result<(), Error> {
+        let mut stmt = match self
+            .conn
+            .prepare("UPDATE todo SET title = ?1, description = ?2, progress = ?3 WHERE id = ?4;")
+        {
             Ok(stmt) => stmt,
             Err(err) => return Err(err),
         };
-        let res = stmt.execute([&item.title, &item.description, &item.progress.to_string(), &item.id.unwrap().to_string()]);
+        let res = stmt.execute([
+            &item.title,
+            &item.description,
+            &item.progress.to_string(),
+            &item.id.unwrap().to_string(),
+        ]);
         match res {
             Ok(_) => Ok(()),
-            Err(err) => Err(rusqlite::Error::InvalidParameterName(format!("Failed to update todo: {}", err))),
+            Err(err) => Err(rusqlite::Error::InvalidParameterName(format!(
+                "Failed to update todo: {}",
+                err
+            ))),
         }
     }
 
@@ -149,7 +161,4 @@ impl Database {
             Err(err) => Err(err),
         }
     }
-    
-
-
 }
